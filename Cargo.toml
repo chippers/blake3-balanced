@@ -1,0 +1,5 @@
+[package]
+name = "blake3-simple"
+version = "0.1.0"
+description = "A simple blake3 implementation based on its rust reference"
+edition = "2018"
