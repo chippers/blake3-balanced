@@ -1,6 +1,10 @@
 fn main() {
     ::afl::fuzz!(|data: &[u8]| {
-        let standard = *::blake3::hash(data).as_bytes();
+        let standard = {
+            let mut hasher = ::blake3::Hasher::default();
+            hasher.update_rayon(data);
+            *hasher.finalize().as_bytes()
+        };
 
         let reference = {
             let mut hasher = ::blake3_reference::Hasher::new();
