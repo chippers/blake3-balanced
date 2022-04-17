@@ -1,5 +1,5 @@
-use std::time::Duration;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::time::Duration;
 
 const INPUT: &[u8] = include_bytes!("element-web-v1.10.10-vendors~init.js");
 
