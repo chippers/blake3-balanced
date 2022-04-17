@@ -12,5 +12,5 @@ blake3-reference = { git = "https://github.com/BLAKE3-team/BLAKE3", package = "r
 criterion = "0.3"
 
 [[bench]]
-name = "element-web-vendors"
+name = "element-web-vendor"
 harness = false
