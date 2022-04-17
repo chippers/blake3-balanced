@@ -40,7 +40,18 @@ In summary, the answer to "why?" is that this is an appealing alternative to
 vendoring the BLAKE3 rust references in multiple projects where these
 characteristics are desired.
 
+## benchmarks
+
+There are benchmarks in an attempt to keep track of the run time differences
+between [`blake3`], the BLAKE3 Rust reference, and `blake3-simple` in addition
+to measure and improve performance of `blake3-simple`. The input file that is
+used is the JavaScript vendor file from v1.10.10 of [element-web]. To run the
+benchmarks, use `cargo-criterion`.
+
+1. install: `cargo install cargo-criterion`
+2. run: `cargo criterion`
 
 [`blake3`]: https://crates.io/crates/blake3
 [See this GitHub thread]: https://github.com/BLAKE3-team/BLAKE3/pull/228
 [hyperfine]: https://github.com/sharkdp/hyperfine
+[element-web]: https://github.com/vector-im/element-web

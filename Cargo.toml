@@ -5,3 +5,12 @@ description = "A simple blake3 implementation based on its rust reference"
 authors = ["Chip Reed <chip@chip.sh>"]
 license = "Apache-2.0 OR MIT"
 edition = "2018"
+
+[dev-dependencies]
+blake3 = { version = "1", features = ["rayon"] }
+blake3-reference = { git = "https://github.com/BLAKE3-team/BLAKE3", package = "reference_impl" }
+criterion = "0.3"
+
+[[bench]]
+name = "element-web-vendors"
+harness = false
