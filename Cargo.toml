@@ -2,4 +2,6 @@
 name = "blake3-simple"
 version = "0.1.0"
 description = "A simple blake3 implementation based on its rust reference"
+authors = ["Chip Reed <chip@chip.sh>"]
+license = "Apache-2.0 OR MIT"
 edition = "2018"
