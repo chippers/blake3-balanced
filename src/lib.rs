@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! let mut hasher = reference_impl::Hasher::new();
+//! let mut hasher = blake3_simple::Hasher::new();
 //! hasher.update(b"abc");
 //! hasher.update(b"def");
 //! let mut hash = [0; 32];
@@ -55,6 +55,8 @@ fn g(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, mx: u32, my:
     state[b] = (state[b] ^ state[c]).rotate_right(7);
 }
 
+/// Inlining this function seems to provide a ~%20 speedup.
+#[inline(always)]
 fn round(state: &mut [u32; 16], m: &[u32; 16]) {
     // Mix the columns.
     g(state, 0, 4, 8, 12, m[0], m[1]);
@@ -384,5 +386,39 @@ impl Hasher {
             );
         }
         output.root_output_bytes(out_slice);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn parity() {
+        let data = b"a string to test";
+        let standard = {
+            let mut hasher = ::blake3::Hasher::default();
+            hasher.update_rayon(data);
+            *hasher.finalize().as_bytes()
+        };
+
+        let reference = {
+            let mut hasher = ::blake3_reference::Hasher::new();
+            hasher.update(data);
+            let mut out = [0; 32];
+            hasher.finalize(&mut out);
+            out
+        };
+
+        let simple = {
+            let mut hasher = super::Hasher::new();
+            hasher.update(data);
+            let mut out = [0; 32];
+            hasher.finalize(&mut out);
+            out
+        };
+
+        for ((&reference, standard), simple) in reference.iter().zip(standard).zip(simple) {
+            assert_eq!(reference, standard);
+            assert_eq!(reference, simple);
+        }
     }
 }
