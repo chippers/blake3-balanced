@@ -786,30 +786,6 @@ impl Hasher {
         self.update_with_join::<join::SerialJoin>(input)
     }
 
-    /// Identical to [`update`](Hasher::update), but using Rayon-based
-    /// multithreading internally.
-    ///
-    /// This method is gated by the `rayon` Cargo feature, which is disabled by
-    /// default but enabled on [docs.rs](https://docs.rs).
-    ///
-    /// To get any performance benefit from multithreading, the input buffer
-    /// needs to be large. As a rule of thumb on x86_64, `update_rayon` is
-    /// _slower_ than `update` for inputs under 128 KiB. That threshold varies
-    /// quite a lot across different processors, and it's important to benchmark
-    /// your specific use case.
-    ///
-    /// Memory mapping an entire input file is a simple way to take advantage of
-    /// multithreading without needing to carefully tune your buffer size or
-    /// offload IO. However, on spinning disks where random access is expensive,
-    /// that approach can lead to disk thrashing and terrible IO performance.
-    /// Note that OS page caching can mask this problem, in which case it might
-    /// only appear for files larger than available RAM. Again, benchmarking
-    /// your specific use case is important.
-    #[cfg(feature = "rayon")]
-    pub fn update_rayon(&mut self, input: &[u8]) -> &mut Self {
-        self.update_with_join::<join::RayonJoin>(input)
-    }
-
     fn update_with_join<J: join::Join>(&mut self, mut input: &[u8]) -> &mut Self {
         // If we have some partial chunk bytes in the internal chunk_state, we
         // need to finish that chunk first.
@@ -988,17 +964,6 @@ impl Hasher {
         self.final_output().root_hash()
     }
 
-    // Finalize the hash state and return an [`OutputReader`], which can
-    // supply any number of output bytes.
-    //
-    // This method is idempotent. Calling it twice will give the same result.
-    // You can also add more input and finalize again.
-    //
-    // [`OutputReader`]: struct.OutputReader.html
-    //pub fn finalize_xof(&self) -> OutputReader {
-    //    OutputReader::new(self.final_output())
-    //}
-
     /// Return the total number of bytes hashed so far.
     pub fn count(&self) -> u64 {
         self.chunk_state.chunk_counter * CHUNK_LEN as u64 + self.chunk_state.len() as u64
@@ -1018,21 +983,6 @@ impl Default for Hasher {
     #[inline]
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::io::Write for Hasher {
-    /// This is equivalent to [`update`](#method.update).
-    #[inline]
-    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
-        self.update(input);
-        Ok(input.len())
-    }
-
-    #[inline]
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
     }
 }
 

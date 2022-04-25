@@ -208,18 +208,20 @@ fn blend_epi16(lhs: Row, rhs: Row, imm8: i32) -> Row {
 
     // _mm_cmpeq_epi16
     mask = {
+        // todo: chunk
         let mut out = [0u8; 16];
         for idx in 0..mask.0.len() {
             let [m0, m1, m2, m3] = mask.0[idx].to_le_bytes();
             let [b0, b1, b2, b3] = bits.0[idx].to_le_bytes();
 
             let first = cmp_u16(m0, m1, b0, b1);
-            out[idx * 4] = first;
-            out[(idx * 4) + 1] = first;
-
             let second = cmp_u16(m2, m3, b2, b3);
-            out[(idx * 4) + 2] = second;
-            out[(idx * 4) + 3] = second;
+
+            let idx = idx * 4;
+            out[idx] = first;
+            out[idx + 1] = first;
+            out[idx + 2] = second;
+            out[idx + 3] = second;
         }
         Row::from(out)
     };
