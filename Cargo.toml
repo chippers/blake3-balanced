@@ -14,6 +14,11 @@ blake3 = { version = "1", features = ["rayon", "pure"] }
 blake3-reference = { git = "https://github.com/BLAKE3-team/BLAKE3", package = "reference_impl" }
 criterion = "0.3"
 
+[profile.bench]
+lto = true
+codegen-units = 1
+incremental = false
+
 [[bench]]
 name = "element-web-vendor"
 harness = false
