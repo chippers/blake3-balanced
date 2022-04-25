@@ -27,6 +27,13 @@ fn blake3_simple(data: &[u8]) -> ::blake3_simple::Hash {
     hasher.finalize()
 }
 
+#[cfg(feature = "rayon")]
+fn blake3_simple_rayon(data: &[u8]) -> ::blake3_simple::Hash {
+    let mut hasher = ::blake3_simple::Hasher::new();
+    hasher.update_rayon(data);
+    hasher.finalize()
+}
+
 pub fn bench_element_web_vendor(c: &mut Criterion) {
     let mut group = c.benchmark_group("element-web-vendor");
     group.measurement_time(Duration::from_secs(10));
@@ -36,6 +43,10 @@ pub fn bench_element_web_vendor(c: &mut Criterion) {
     });
     group.bench_function("blake3-simple", |b| {
         b.iter(|| blake3_simple(black_box(INPUT)))
+    });
+    #[cfg(feature = "rayon")]
+    group.bench_function("blake3-simple-rayon", |b| {
+        b.iter(|| blake3_simple_rayon(black_box(INPUT)))
     });
     group.bench_function("reference", |b| {
         b.iter(|| blake3_reference(black_box(INPUT)))

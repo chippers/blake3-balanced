@@ -18,12 +18,16 @@
 //! ```
 //!
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 
-use arrayref::{array_mut_ref, array_ref};
+use crate::platform::{array_ref, array_ref_mut};
 use arrayvec::ArrayVec;
 use core::{cmp, fmt};
+
+mod compress;
+mod join;
+mod platform;
 
 // While iterating the compression function within a chunk, the CV is
 // represented as words, to avoid doing two extra endianness conversions for
@@ -59,9 +63,6 @@ pub const OUT_LEN: usize = 32;
 pub const KEY_LEN: usize = 32;
 
 const MAX_DEPTH: usize = 54; // 2^54 * CHUNK_LEN = 2^64
-
-mod compress;
-mod platform;
 
 #[inline]
 fn counter_low(counter: u64) -> u32 {
@@ -302,7 +303,7 @@ fn compress_chunks_parallel(
         let counter = chunk_counter + chunks_so_far as u64;
         let mut chunk_state = ChunkState::new(key, counter, flags);
         chunk_state.update(chunks_exact.remainder());
-        *array_mut_ref!(out, chunks_so_far * OUT_LEN, OUT_LEN) =
+        *array_ref_mut!(out, chunks_so_far * OUT_LEN, OUT_LEN) =
             chunk_state.output().chaining_value();
         chunks_so_far + 1
     } else {
@@ -350,41 +351,6 @@ fn compress_parents_parallel(
         parents_so_far + 1
     } else {
         parents_so_far
-    }
-}
-
-mod join {
-    /// The trait that abstracts over single-threaded and multi-threaded recursion.
-    ///
-    /// See the [`join` module docs](index.html) for more details.
-    pub trait Join {
-        fn join<A, B, RA, RB>(oper_a: A, oper_b: B) -> (RA, RB)
-        where
-            A: FnOnce() -> RA + Send,
-            B: FnOnce() -> RB + Send,
-            RA: Send,
-            RB: Send;
-    }
-
-    /// The trivial, serial implementation of `Join`. The left and right sides are
-    /// executed one after the other, on the calling thread. The standalone hashing
-    /// functions and the `Hasher::update` method use this implementation
-    /// internally.
-    ///
-    /// See the [`join` module docs](index.html) for more details.
-    pub enum SerialJoin {}
-
-    impl Join for SerialJoin {
-        #[inline]
-        fn join<A, B, RA, RB>(oper_a: A, oper_b: B) -> (RA, RB)
-        where
-            A: FnOnce() -> RA + Send,
-            B: FnOnce() -> RB + Send,
-            RA: Send,
-            RB: Send,
-        {
-            (oper_a(), oper_b())
-        }
     }
 }
 
@@ -784,6 +750,11 @@ impl Hasher {
     /// [`std::io::copy`]: https://doc.rust-lang.org/std/io/fn.copy.html
     pub fn update(&mut self, input: &[u8]) -> &mut Self {
         self.update_with_join::<join::SerialJoin>(input)
+    }
+
+    #[cfg(feature = "rayon")]
+    pub fn update_rayon(&mut self, input: &[u8]) -> &mut Self {
+        self.update_with_join::<join::RayonJoin>(input)
     }
 
     fn update_with_join<J: join::Join>(&mut self, mut input: &[u8]) -> &mut Self {

@@ -1,5 +1,33 @@
 use core::convert::TryInto;
 
+macro_rules! array_ref {
+    ($arr:expr, $idx:expr, $len:expr) => {{
+        {
+            #[inline(always)]
+            fn as_array<T>(slice: &[T]) -> &[T; $len] {
+                use ::core::convert::TryInto;
+                slice.try_into().expect("slice into array")
+            }
+            as_array(&$arr[$idx..($idx + $len)])
+        }
+    }};
+}
+pub(crate) use array_ref;
+
+macro_rules! array_ref_mut {
+    ($arr:expr, $idx:expr, $len:expr) => {{
+        {
+            #[inline(always)]
+            fn as_array_mut<T>(slice: &mut [T]) -> &mut [T; $len] {
+                use ::core::convert::TryInto;
+                slice.try_into().expect("slice into array")
+            }
+            as_array_mut(&mut $arr[$idx..($idx + $len)])
+        }
+    }};
+}
+pub(crate) use array_ref_mut;
+
 #[inline(always)]
 pub(crate) fn le_bytes_from_words_32(words: &[u32; 8]) -> [u8; 32] {
     let mut out = [0; 32];
