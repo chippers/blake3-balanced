@@ -18,11 +18,10 @@
 //! ```
 //!
 
-#![cfg_attr(not(feature = "std"), no_std)]
+//#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 
 use crate::platform::{array_ref, array_ref_mut};
-use arrayvec::ArrayVec;
 use core::{cmp, fmt};
 
 mod compress;
@@ -282,12 +281,14 @@ fn compress_chunks_parallel(
     debug_assert!(input.len() <= MAX_SIMD_DEGREE * CHUNK_LEN);
 
     let mut chunks_exact = input.chunks_exact(CHUNK_LEN);
-    let mut chunks_array = ArrayVec::<&[u8; CHUNK_LEN], MAX_SIMD_DEGREE>::new();
+    let mut chunks_array = [&[0u8; CHUNK_LEN]; MAX_SIMD_DEGREE];
+    let mut chunks_array_len = 0;
     for chunk in &mut chunks_exact {
-        chunks_array.push(array_ref!(chunk, 0, CHUNK_LEN));
+        chunks_array[chunks_array_len] = array_ref!(chunk, 0, CHUNK_LEN);
+        chunks_array_len += 1;
     }
     compress::hash_many(
-        &chunks_array,
+        &chunks_array[..chunks_array_len],
         key,
         chunk_counter,
         flags,
@@ -298,7 +299,7 @@ fn compress_chunks_parallel(
 
     // Hash the remaining partial chunk, if there is one. Note that the empty
     // chunk (meaning the empty message) is a different codepath.
-    let chunks_so_far = chunks_array.len();
+    let chunks_so_far = chunks_array_len;
     if !chunks_exact.remainder().is_empty() {
         let counter = chunk_counter + chunks_so_far as u64;
         let mut chunk_state = ChunkState::new(key, counter, flags);
@@ -330,12 +331,14 @@ fn compress_parents_parallel(
     let mut parents_exact = child_chaining_values.chunks_exact(BLOCK_LEN);
     // Use MAX_SIMD_DEGREE_OR_2 rather than MAX_SIMD_DEGREE here, because of
     // the requirements of compress_subtree_wide().
-    let mut parents_array = ArrayVec::<&[u8; BLOCK_LEN], MAX_SIMD_DEGREE_OR_2>::new();
+    let mut parents_array = [&[0u8; BLOCK_LEN]; MAX_SIMD_DEGREE_OR_2];
+    let mut parents_array_len = 0;
     for parent in &mut parents_exact {
-        parents_array.push(array_ref!(parent, 0, BLOCK_LEN));
+        parents_array[parents_array_len] = array_ref!(parent, 0, BLOCK_LEN);
+        parents_array_len += 1;
     }
     compress::hash_many(
-        &parents_array,
+        &parents_array[..parents_array_len],
         key,
         0, // Parents always use counter 0.
         flags | PARENT,
@@ -345,7 +348,7 @@ fn compress_parents_parallel(
     );
 
     // If there's an odd child left over, it becomes an output.
-    let parents_so_far = parents_array.len();
+    let parents_so_far = parents_array_len;
     if !parents_exact.remainder().is_empty() {
         out[parents_so_far * OUT_LEN..][..OUT_LEN].copy_from_slice(parents_exact.remainder());
         parents_so_far + 1
@@ -625,7 +628,8 @@ pub struct Hasher {
     // requires a 4th entry, rather than merging everything down to 1, because
     // we don't know whether more input is coming. This is different from how
     // the reference implementation does things.
-    cv_stack: ArrayVec<CVBytes, { MAX_DEPTH + 1 }>,
+    cv_stack: [CVBytes; MAX_DEPTH + 1],
+    cv_stack_len: usize,
 }
 
 impl Hasher {
@@ -633,7 +637,8 @@ impl Hasher {
         Self {
             key: *key,
             chunk_state: ChunkState::new(key, 0, flags),
-            cv_stack: ArrayVec::new(),
+            cv_stack: [[0; 32]; MAX_DEPTH + 1],
+            cv_stack_len: 0,
         }
     }
 
@@ -670,8 +675,23 @@ impl Hasher {
     /// one, using the same key or context string if any.
     pub fn reset(&mut self) -> &mut Self {
         self.chunk_state = ChunkState::new(&self.key, 0, self.chunk_state.flags);
-        self.cv_stack.clear();
+        for stack in self.cv_stack.iter_mut() {
+            for byte in stack {
+                *byte = 0
+            }
+        }
+        self.cv_stack_len = 0;
         self
+    }
+
+    fn stack_push(&mut self, cv: CVBytes) {
+        self.cv_stack[self.cv_stack_len] = cv;
+        self.cv_stack_len += 1;
+    }
+
+    fn stack_pop(&mut self) -> CVBytes {
+        self.cv_stack_len -= 1;
+        self.cv_stack[self.cv_stack_len]
     }
 
     // As described in push_cv() below, we do "lazy merging", delaying merges
@@ -687,12 +707,12 @@ impl Hasher {
     // of chunks (or bytes) so far.
     fn merge_cv_stack(&mut self, total_len: u64) {
         let post_merge_stack_len = total_len.count_ones() as usize;
-        while self.cv_stack.len() > post_merge_stack_len {
-            let right_child = self.cv_stack.pop().unwrap();
-            let left_child = self.cv_stack.pop().unwrap();
+        while self.cv_stack_len > post_merge_stack_len {
+            let right_child = self.stack_pop();
+            let left_child = self.stack_pop();
             let parent_output =
                 parent_node_output(&left_child, &right_child, &self.key, self.chunk_state.flags);
-            self.cv_stack.push(parent_output.chaining_value());
+            self.stack_push(parent_output.chaining_value());
         }
     }
 
@@ -731,7 +751,7 @@ impl Hasher {
     // we're hashing an input all-at-once.)
     fn push_cv(&mut self, new_cv: &CVBytes, chunk_counter: u64) {
         self.merge_cv_stack(chunk_counter);
-        self.cv_stack.push(*new_cv);
+        self.stack_push(*new_cv);
     }
 
     /// Add input bytes to the hash state. You can call this any number of
@@ -878,7 +898,7 @@ impl Hasher {
         // If the current chunk is the only chunk, that makes it the root node
         // also. Convert it directly into an Output. Otherwise, we need to
         // merge subtrees below.
-        if self.cv_stack.is_empty() {
+        if self.cv_stack_len == 0 {
             debug_assert_eq!(self.chunk_state.chunk_counter, 0);
             return self.chunk_state.output();
         }
@@ -896,16 +916,16 @@ impl Hasher {
         // top, because we'll merge them with each other. Note that the case of
         // the empty chunk is taken care of above.
         let mut output: Output;
-        let mut num_cvs_remaining = self.cv_stack.len();
+        let mut num_cvs_remaining = self.cv_stack_len;
         if self.chunk_state.len() > 0 {
             debug_assert_eq!(
-                self.cv_stack.len(),
+                self.cv_stack_len,
                 self.chunk_state.chunk_counter.count_ones() as usize,
                 "cv stack does not need a merge"
             );
             output = self.chunk_state.output();
         } else {
-            debug_assert!(self.cv_stack.len() >= 2);
+            debug_assert!(self.cv_stack_len >= 2);
             output = parent_node_output(
                 &self.cv_stack[num_cvs_remaining - 2],
                 &self.cv_stack[num_cvs_remaining - 1],
@@ -986,5 +1006,14 @@ mod tests {
             assert_eq!(reference, standard);
             assert_eq!(reference, simple);
         }
+    }
+
+    #[test]
+    fn large_file() {
+        let data = include_bytes!("../benches/element-web-v1.10.10-vendors~init.js");
+        let mut hasher = super::Hasher::new();
+        hasher.update(data);
+        let bytes = *hasher.finalize().as_bytes();
+        assert!(!bytes.iter().all(|&b| b == 0))
     }
 }

@@ -6,11 +6,7 @@ authors = ["Chip Reed <chip@chip.sh>"]
 license = "Apache-2.0 OR MIT"
 edition = "2018"
 
-[features]
-default = []
-
 [dependencies]
-arrayvec = "0.7"
 rayon = { version = "1", optional = true }
 
 [dev-dependencies]
@@ -18,13 +14,6 @@ blake3 = { version = "1", features = ["rayon", "pure"] }
 blake3-reference = { git = "https://github.com/BLAKE3-team/BLAKE3", package = "reference_impl" }
 criterion = "0.3"
 
-[profile.bench]
-debug = true
-
 [[bench]]
 name = "element-web-vendor"
-harness = false
-
-[[bench]]
-name = "element-web-vendor-simple"
 harness = false
