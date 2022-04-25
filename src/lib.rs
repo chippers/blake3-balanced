@@ -23,121 +23,7 @@
 
 use arrayref::{array_mut_ref, array_ref};
 use arrayvec::ArrayVec;
-use core::convert::TryInto;
 use core::{cmp, fmt};
-
-/*const OUT_LEN: usize = 32;
-const KEY_LEN: usize = 32;
-const BLOCK_LEN: usize = 64;
-const CHUNK_LEN: usize = 1024;
-
-const CHUNK_START: u32 = 1 << 0;
-const CHUNK_END: u32 = 1 << 1;
-const PARENT: u32 = 1 << 2;
-const ROOT: u32 = 1 << 3;
-const KEYED_HASH: u32 = 1 << 4;
-const DERIVE_KEY_CONTEXT: u32 = 1 << 5;
-const DERIVE_KEY_MATERIAL: u32 = 1 << 6;
-
-const IV: [u32; 8] = [
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
-];
-
-const MSG_PERMUTATION: [usize; 16] = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
-
-// The mixing function, G, which mixes either a column or a diagonal.
-fn g(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, mx: u32, my: u32) {
-    state[a] = state[a].wrapping_add(state[b]).wrapping_add(mx);
-    state[d] = (state[d] ^ state[a]).rotate_right(16);
-    state[c] = state[c].wrapping_add(state[d]);
-    state[b] = (state[b] ^ state[c]).rotate_right(12);
-    state[a] = state[a].wrapping_add(state[b]).wrapping_add(my);
-    state[d] = (state[d] ^ state[a]).rotate_right(8);
-    state[c] = state[c].wrapping_add(state[d]);
-    state[b] = (state[b] ^ state[c]).rotate_right(7);
-}
-
-/// Inlining this function seems to provide a ~%20 speedup.
-#[inline(always)]
-fn round(state: &mut [u32; 16], m: &[u32; 16]) {
-    // Mix the columns.
-    g(state, 0, 4, 8, 12, m[0], m[1]);
-    g(state, 1, 5, 9, 13, m[2], m[3]);
-    g(state, 2, 6, 10, 14, m[4], m[5]);
-    g(state, 3, 7, 11, 15, m[6], m[7]);
-    // Mix the diagonals.
-    g(state, 0, 5, 10, 15, m[8], m[9]);
-    g(state, 1, 6, 11, 12, m[10], m[11]);
-    g(state, 2, 7, 8, 13, m[12], m[13]);
-    g(state, 3, 4, 9, 14, m[14], m[15]);
-}
-
-fn permute(m: &mut [u32; 16]) {
-    let mut permuted = [0; 16];
-    for i in 0..16 {
-        permuted[i] = m[MSG_PERMUTATION[i]];
-    }
-    *m = permuted;
-}
-
-fn compress(
-    chaining_value: &[u32; 8],
-    block_words: &[u32; 16],
-    counter: u64,
-    block_len: u32,
-    flags: u32,
-) -> [u32; 16] {
-    let mut state = [
-        chaining_value[0],
-        chaining_value[1],
-        chaining_value[2],
-        chaining_value[3],
-        chaining_value[4],
-        chaining_value[5],
-        chaining_value[6],
-        chaining_value[7],
-        IV[0],
-        IV[1],
-        IV[2],
-        IV[3],
-        counter as u32,
-        (counter >> 32) as u32,
-        block_len,
-        flags,
-    ];
-    let mut block = *block_words;
-
-    round(&mut state, &block); // round 1
-    permute(&mut block);
-    round(&mut state, &block); // round 2
-    permute(&mut block);
-    round(&mut state, &block); // round 3
-    permute(&mut block);
-    round(&mut state, &block); // round 4
-    permute(&mut block);
-    round(&mut state, &block); // round 5
-    permute(&mut block);
-    round(&mut state, &block); // round 6
-    permute(&mut block);
-    round(&mut state, &block); // round 7
-
-    for i in 0..8 {
-        state[i] ^= state[i + 8];
-        state[i + 8] ^= chaining_value[i];
-    }
-    state
-}
-
-fn first_8_words(compression_output: [u32; 16]) -> [u32; 8] {
-    compression_output[0..8].try_into().unwrap()
-}
-
-fn words_from_little_endian_bytes(bytes: &[u8], words: &mut [u32]) {
-    debug_assert_eq!(bytes.len(), 4 * words.len());
-    for (four_bytes, word) in bytes.chunks_exact(4).zip(words) {
-        *word = u32::from_le_bytes(four_bytes.try_into().unwrap());
-    }
-}*/
 
 // While iterating the compression function within a chunk, the CV is
 // represented as words, to avoid doing two extra endianness conversions for
@@ -149,16 +35,6 @@ type CVBytes = [u8; 32]; // little-endian
 
 const IV: &CVWords = &[
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
-];
-
-const MSG_SCHEDULE: [[usize; 16]; 7] = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8],
-    [3, 4, 10, 12, 13, 2, 7, 14, 6, 5, 9, 0, 11, 15, 8, 1],
-    [10, 7, 12, 9, 14, 3, 13, 15, 4, 0, 11, 2, 5, 8, 1, 6],
-    [12, 13, 9, 11, 15, 10, 14, 8, 7, 2, 5, 3, 0, 1, 6, 4],
-    [9, 14, 11, 5, 8, 12, 15, 1, 13, 3, 0, 10, 2, 6, 4, 7],
-    [11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13],
 ];
 
 // These are the internal flags that we use to domain separate root/non-root,
@@ -185,64 +61,7 @@ pub const KEY_LEN: usize = 32;
 const MAX_DEPTH: usize = 54; // 2^54 * CHUNK_LEN = 2^64
 
 mod compress;
-
-mod platform {
-    use crate::{CVBytes, CVWords};
-    use core::convert::TryInto;
-
-    #[inline(always)]
-    fn word_to_bytes(bytes: &mut [u8], word: u32) {
-        let [byte0, byte1, byte2, byte3] = word.to_le_bytes();
-        bytes[0] = byte0;
-        bytes[1] = byte1;
-        bytes[2] = byte2;
-        bytes[3] = byte3;
-    }
-
-    #[inline(always)]
-    pub fn le_bytes_from_words_32(words: &[u32; 8]) -> [u8; 32] {
-        let mut out = [0; 32];
-        for (bytes, &word) in out.chunks_exact_mut(4).zip(words) {
-            word_to_bytes(bytes, word);
-        }
-        out
-    }
-
-    #[inline(always)]
-    pub fn le_bytes_from_words_64(words: &[u32; 16]) -> [u8; 64] {
-        let mut out = [0; 64];
-        for (bytes, &word) in out.chunks_exact_mut(4).zip(words) {
-            word_to_bytes(bytes, word);
-        }
-        out
-    }
-
-    #[inline(always)]
-    pub fn words_from_le_bytes_64(bytes: &[u8; 64]) -> [u32; 16] {
-        let mut out = [0; 16];
-        for (bytes, word) in bytes.chunks_exact(4).zip(&mut out) {
-            *word = u32::from_le_bytes(
-                bytes
-                    .try_into()
-                    .expect("chunks_exact(4) returned a chunk not size 4"),
-            );
-        }
-        out
-    }
-
-    #[inline(always)]
-    pub fn words_from_le_bytes_32(bytes: &[u8; 32]) -> [u32; 8] {
-        let mut out = [0; 8];
-        for (bytes, word) in bytes.chunks_exact(4).zip(&mut out) {
-            *word = u32::from_le_bytes(
-                bytes
-                    .try_into()
-                    .expect("chunks_exact(4) returned a chunk not size 4"),
-            );
-        }
-        out
-    }
-}
+mod platform;
 
 #[inline]
 fn counter_low(counter: u64) -> u32 {
@@ -296,16 +115,6 @@ impl Output {
         let mut cv = self.input_chaining_value;
         compress::compress_in_place(&mut cv, &self.block, self.block_len, 0, self.flags | ROOT);
         Hash(platform::le_bytes_from_words_32(&cv))
-    }
-
-    fn root_output_block(&self) -> [u8; 2 * OUT_LEN] {
-        compress::compress_xof(
-            &self.input_chaining_value,
-            &self.block,
-            self.block_len,
-            self.counter,
-            self.flags | ROOT,
-        )
     }
 }
 
@@ -436,16 +245,6 @@ impl fmt::Debug for ChunkState {
 pub enum IncrementCounter {
     Yes,
     No,
-}
-
-impl IncrementCounter {
-    #[inline]
-    fn yes(&self) -> bool {
-        match self {
-            IncrementCounter::Yes => true,
-            IncrementCounter::No => false,
-        }
-    }
 }
 
 // The largest power of two less than or equal to `n`, used for left_len()
@@ -681,7 +480,7 @@ fn compress_subtree_to_parent_node<J: join::Join>(
 ) -> [u8; BLOCK_LEN] {
     debug_assert!(input.len() > CHUNK_LEN);
     let mut cv_array = [0; MAX_SIMD_DEGREE_OR_2 * OUT_LEN];
-    let mut num_cvs = compress_subtree_wide::<J>(input, &key, chunk_counter, flags, &mut cv_array);
+    let mut num_cvs = compress_subtree_wide::<J>(input, key, chunk_counter, flags, &mut cv_array);
     debug_assert!(num_cvs >= 2);
 
     // If MAX_SIMD_DEGREE is greater than 2 and there's enough input,
