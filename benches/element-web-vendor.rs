@@ -21,12 +21,10 @@ fn blake3_reference(data: &[u8]) -> [u8; 32] {
     out
 }
 
-fn blake3_simple(data: &[u8]) -> [u8; 32] {
+fn blake3_simple(data: &[u8]) -> ::blake3_simple::Hash {
     let mut hasher = ::blake3_simple::Hasher::new();
     hasher.update(data);
-    let mut out = [0; 32];
-    hasher.finalize(&mut out);
-    out
+    hasher.finalize()
 }
 
 pub fn bench_element_web_vendor(c: &mut Criterion) {
