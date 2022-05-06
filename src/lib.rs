@@ -984,7 +984,7 @@ mod tests {
         let data = b"a string to test";
         let standard = {
             let mut hasher = ::blake3::Hasher::default();
-            hasher.update_rayon(data);
+            hasher.update(data);
             *hasher.finalize().as_bytes()
         };
 

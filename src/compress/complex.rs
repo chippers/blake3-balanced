@@ -1,17 +1,27 @@
 use crate::platform::{array_ref, array_ref_mut};
 use crate::{counter_high, counter_low, CVBytes, CVWords, BLOCK_LEN, IV, OUT_LEN};
-use core::ops::{Add, AddAssign, BitAnd, BitOr, BitXorAssign, Not};
+use core::{
+    iter::{Map, Zip},
+    ops::{Add, AddAssign, BitAnd, BitOr, BitXorAssign, Not},
+    slice::{Iter, IterMut},
+};
 
-#[derive(Clone, Copy)]
+type IterOps<'a, 'b, 'c> = Map<
+    Zip<IterMut<'a, u32>, Zip<Iter<'b, u32>, Iter<'c, u32>>>,
+    for<'r> fn((&'r mut u32, (&u32, &u32))) -> (&'r mut u32, u32, u32),
+>;
+
 struct Row([u32; 4]);
 
 impl From<[u32; 4]> for Row {
+    #[inline(always)]
     fn from(row: [u32; 4]) -> Self {
         Self(row)
     }
 }
 
 impl From<&[u8; 16]> for Row {
+    #[inline(always)]
     fn from(bytes: &[u8; 16]) -> Self {
         Self([
             u32::from_le_bytes(*array_ref!(bytes, 0, 4)),
@@ -23,6 +33,29 @@ impl From<&[u8; 16]> for Row {
 }
 
 impl Row {
+    #[inline(always)]
+    fn empty() -> Self {
+        Row([0; 4])
+    }
+
+    #[inline(always)]
+    fn iter_mut(&mut self) -> IterMut<'_, u32> {
+        self.0.iter_mut()
+    }
+
+    #[inline(always)]
+    fn iter_ops<'rhs, 'lhs: 'rhs, 'a: 'lhs>(
+        &'a mut self,
+        lhs: &'lhs Self,
+        rhs: &'lhs Self,
+    ) -> IterOps<'a, 'lhs, 'rhs> {
+        self.0
+            .iter_mut()
+            .zip(lhs.0.iter().zip(rhs.0.iter()))
+            .map(map_out_lhs_rhs)
+    }
+
+    #[inline(always)]
     fn rot(&mut self, n: u32) {
         for word in &mut self.0 {
             *word = word.rotate_right(n);
@@ -30,8 +63,8 @@ impl Row {
     }
 
     /// Equivalent to `_mm_shuffle_epi32(src, _MM_SHUFFLE!(z, y, x, w))`
-
-    fn shuffle(row: Self, z: usize, y: usize, x: usize, w: usize) -> Self {
+    #[inline(always)]
+    fn shuffle(row: &Self, z: usize, y: usize, x: usize, w: usize) -> Self {
         let row = row.0;
         Self([row[w], row[x], row[y], row[z]])
     }
@@ -49,16 +82,24 @@ impl Row {
     ///   };
     /// }
     /// ```
-
-    fn shuffle2(lhs: Self, rhs: Self, z: usize, y: usize, x: usize, w: usize) -> Self {
+    #[inline(always)]
+    fn shuffle2(lhs: &Self, rhs: &Self, z: usize, y: usize, x: usize, w: usize) -> Self {
         let (lhs, rhs) = (lhs.0, rhs.0);
         Self([lhs[w], lhs[x], rhs[y], rhs[z]])
     }
 }
 
+#[inline(always)]
+fn map_out_lhs_rhs<'a>(
+    (out, (&lhs, &rhs)): (&'a mut u32, (&u32, &u32)),
+) -> (&'a mut u32, u32, u32) {
+    (out, lhs, rhs)
+}
+
 impl Add<&Row> for &Row {
     type Output = Row;
 
+    #[inline(always)]
     fn add(self, rhs: &Row) -> Self::Output {
         let mut out = Row([0; 4]);
         for (out, (lhs, rhs)) in out.0.iter_mut().zip(self.0.iter().zip(rhs.0)) {
@@ -69,6 +110,7 @@ impl Add<&Row> for &Row {
 }
 
 impl AddAssign<&Row> for Row {
+    #[inline(always)]
     fn add_assign(&mut self, rhs: &Row) {
         for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
             *lhs = lhs.wrapping_add(rhs)
@@ -77,6 +119,7 @@ impl AddAssign<&Row> for Row {
 }
 
 impl BitXorAssign<&Row> for Row {
+    #[inline(always)]
     fn bitxor_assign(&mut self, rhs: &Row) {
         for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
             *lhs ^= rhs
@@ -84,20 +127,23 @@ impl BitXorAssign<&Row> for Row {
     }
 }
 
-impl BitAnd<Self> for Row {
-    type Output = Self;
+impl BitAnd<Self> for &Row {
+    type Output = Row;
 
-    fn bitand(mut self, rhs: Self) -> Self::Output {
-        for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
-            *lhs &= rhs
+    #[inline(always)]
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let mut out = Row::empty();
+        for (out, lhs, rhs) in out.iter_ops(self, rhs) {
+            *out = lhs & rhs
         }
-        self
+        out
     }
 }
 
 impl BitOr<Self> for Row {
     type Output = Self;
 
+    #[inline(always)]
     fn bitor(mut self, rhs: Self) -> Self::Output {
         for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
             *lhs |= rhs;
@@ -106,17 +152,20 @@ impl BitOr<Self> for Row {
     }
 }
 
-impl Not for Row {
-    type Output = Self;
+impl Not for &Row {
+    type Output = Row;
 
-    fn not(mut self) -> Self::Output {
-        for word in self.0.iter_mut() {
-            *word = !&*word
+    #[inline(always)]
+    fn not(self) -> Self::Output {
+        let mut out = Row::empty();
+        for (out, word) in out.iter_mut().zip(self.0) {
+            *out = !word
         }
-        self
+        out
     }
 }
 
+#[inline(always)]
 fn g1(row0: &mut Row, row1: &mut Row, row2: &mut Row, row3: &mut Row, m: &Row) {
     *row0 = row0.add(m).add(row1);
     row3.bitxor_assign(row0);
@@ -126,6 +175,7 @@ fn g1(row0: &mut Row, row1: &mut Row, row2: &mut Row, row3: &mut Row, m: &Row) {
     row1.rot(12)
 }
 
+#[inline(always)]
 fn g2(row0: &mut Row, row1: &mut Row, row2: &mut Row, row3: &mut Row, m: &Row) {
     *row0 = row0.add(m).add(row1);
     row3.bitxor_assign(row0);
@@ -139,19 +189,22 @@ fn g2(row0: &mut Row, row1: &mut Row, row2: &mut Row, row3: &mut Row, m: &Row) {
 // row0. All the message loads below are adjusted to compensate for this. See
 // discussion at https://github.com/sneves/blake2-avx2/pull/4
 
+#[inline(always)]
 fn diagonalize(row0: &mut Row, row2: &mut Row, row3: &mut Row) {
-    *row0 = Row::shuffle(*row0, 2, 1, 0, 3);
-    *row3 = Row::shuffle(*row3, 1, 0, 3, 2);
-    *row2 = Row::shuffle(*row2, 0, 3, 2, 1);
+    *row0 = Row::shuffle(row0, 2, 1, 0, 3);
+    *row3 = Row::shuffle(row3, 1, 0, 3, 2);
+    *row2 = Row::shuffle(row2, 0, 3, 2, 1);
 }
 
+#[inline(always)]
 fn undiagonalize(row0: &mut Row, row2: &mut Row, row3: &mut Row) {
-    *row0 = Row::shuffle(*row0, 0, 3, 2, 1);
-    *row3 = Row::shuffle(*row3, 1, 0, 3, 2);
-    *row2 = Row::shuffle(*row2, 2, 1, 0, 3);
+    *row0 = Row::shuffle(row0, 0, 3, 2, 1);
+    *row3 = Row::shuffle(row3, 1, 0, 3, 2);
+    *row2 = Row::shuffle(row2, 2, 1, 0, 3);
 }
 
-fn blend_epi16(lhs: Row, rhs: Row, imm8: i32) -> Row {
+#[inline(always)]
+fn blend_epi16(lhs: &Row, rhs: &Row, imm8: i32) -> Row {
     let bits = Row([0x0001_0002, 0x0004_0008, 0x0010_0020, 0x0040_0080]);
     let mut mask = {
         let bytes = (imm8 as i16).to_le_bytes();
@@ -159,7 +212,7 @@ fn blend_epi16(lhs: Row, rhs: Row, imm8: i32) -> Row {
         Row([imm8_32, imm8_32, imm8_32, imm8_32])
     };
 
-    mask = mask & bits;
+    mask = &mask & &bits;
 
     // _mm_cmpeq_epi16
     mask = {
@@ -181,9 +234,10 @@ fn blend_epi16(lhs: Row, rhs: Row, imm8: i32) -> Row {
         Row::from(&out)
     };
 
-    (mask & rhs) | (!mask & lhs)
+    (&mask & rhs) | (&!&mask & lhs)
 }
 
+#[inline(always)]
 fn cmp_u16(l0: u8, l1: u8, r0: u8, r1: u8) -> u8 {
     if l0 == r0 && l1 == r1 {
         0xFF
@@ -192,15 +246,18 @@ fn cmp_u16(l0: u8, l1: u8, r0: u8, r1: u8) -> u8 {
     }
 }
 
-fn unpacklo_epi64(lhs: Row, rhs: Row) -> Row {
+#[inline(always)]
+fn unpacklo_epi64(lhs: &Row, rhs: &Row) -> Row {
     Row([lhs.0[0], lhs.0[1], rhs.0[0], rhs.0[1]])
 }
 
-fn unpacklo_epi32(lhs: Row, rhs: Row) -> Row {
+#[inline(always)]
+fn unpacklo_epi32(lhs: &Row, rhs: &Row) -> Row {
     Row([lhs.0[0], rhs.0[0], lhs.0[1], rhs.0[1]])
 }
 
-fn unpackhi_epi32(lhs: Row, rhs: Row) -> Row {
+#[inline(always)]
+fn unpackhi_epi32(lhs: &Row, rhs: &Row) -> Row {
     Row([lhs.0[2], rhs.0[2], lhs.0[3], rhs.0[3]])
 }
 
@@ -211,21 +268,21 @@ macro_rules! round2plus {
         $t0:ident, $t1:ident, $t2:ident, $t3:ident,
         $tt:ident
     ) => {
-        $t0 = Row::shuffle2($m0, $m1, 3, 1, 1, 2);
-        $t0 = Row::shuffle($t0, 0, 3, 2, 1);
+        $t0 = Row::shuffle2(&$m0, &$m1, 3, 1, 1, 2);
+        $t0 = Row::shuffle(&$t0, 0, 3, 2, 1);
         g1(&mut $row0, &mut $row1, &mut $row2, &mut $row3, &$t0);
-        $t1 = Row::shuffle2($m2, $m3, 3, 3, 2, 2);
-        $tt = Row::shuffle($m0, 0, 0, 3, 3);
-        $t1 = blend_epi16($tt, $t1, 0xCC);
+        $t1 = Row::shuffle2(&$m2, &$m3, 3, 3, 2, 2);
+        $tt = Row::shuffle(&$m0, 0, 0, 3, 3);
+        $t1 = blend_epi16(&$tt, &$t1, 0xCC);
         g2(&mut $row0, &mut $row1, &mut $row2, &mut $row3, &$t1);
         diagonalize(&mut $row0, &mut $row2, &mut $row3);
-        $t2 = unpacklo_epi64($m3, $m1);
-        $tt = blend_epi16($t2, $m2, 0xC0);
-        $t2 = Row::shuffle($tt, 1, 3, 2, 0);
+        $t2 = unpacklo_epi64(&$m3, &$m1);
+        $tt = blend_epi16(&$t2, &$m2, 0xC0);
+        $t2 = Row::shuffle(&$tt, 1, 3, 2, 0);
         g1(&mut $row0, &mut $row1, &mut $row2, &mut $row3, &$t2);
-        $t3 = unpackhi_epi32($m1, $m3);
-        $tt = unpacklo_epi32($m2, $t3);
-        $t3 = Row::shuffle($tt, 0, 1, 3, 2);
+        $t3 = unpackhi_epi32(&$m1, &$m3);
+        $tt = unpacklo_epi32(&$m2, &$t3);
+        $t3 = Row::shuffle(&$tt, 0, 1, 3, 2);
         g2(&mut $row0, &mut $row1, &mut $row2, &mut $row3, &$t3);
         undiagonalize(&mut $row0, &mut $row2, &mut $row3);
     };
@@ -259,16 +316,16 @@ fn compress_pre(
 
     // Round 1. The first round permutes the message words from the original
     // input order, into the groups that get mixed in parallel.
-    let mut t0 = Row::shuffle2(m0, m1, 2, 0, 2, 0);
+    let mut t0 = Row::shuffle2(&m0, &m1, 2, 0, 2, 0);
     g1(&mut row0, &mut row1, &mut row2, &mut row3, &t0);
-    let mut t1 = Row::shuffle2(m0, m1, 3, 1, 3, 1);
+    let mut t1 = Row::shuffle2(&m0, &m1, 3, 1, 3, 1);
     g2(&mut row0, &mut row1, &mut row2, &mut row3, &t1);
     diagonalize(&mut row0, &mut row2, &mut row3);
-    let mut t2 = Row::shuffle2(m2, m3, 2, 0, 2, 0);
-    t2 = Row::shuffle(t2, 2, 1, 0, 3);
+    let mut t2 = Row::shuffle2(&m2, &m3, 2, 0, 2, 0);
+    t2 = Row::shuffle(&t2, 2, 1, 0, 3);
     g1(&mut row0, &mut row1, &mut row2, &mut row3, &t2);
-    let mut t3 = Row::shuffle2(m2, m3, 3, 1, 3, 1);
-    t3 = Row::shuffle(t3, 2, 1, 0, 3);
+    let mut t3 = Row::shuffle2(&m2, &m3, 3, 1, 3, 1);
+    t3 = Row::shuffle(&t3, 2, 1, 0, 3);
     g2(&mut row0, &mut row1, &mut row2, &mut row3, &t3);
     undiagonalize(&mut row0, &mut row2, &mut row3);
     m0 = t0;
