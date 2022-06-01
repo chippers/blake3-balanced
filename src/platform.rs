@@ -79,7 +79,7 @@ pub(crate) fn words_from_le_bytes_32(bytes: &[u8; 32]) -> [u32; 8] {
     out
 }
 
-#[cfg(not(complex))]
+//#[cfg(not(complex))]
 #[inline(always)]
 pub(crate) fn words_from_le_bytes_64(bytes: &[u8; 64]) -> [u32; 16] {
     let mut out = [0; 16];

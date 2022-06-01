@@ -57,9 +57,13 @@ impl Row {
 
     #[inline(always)]
     fn rot(&mut self, n: u32) {
-        for word in &mut self.0 {
-            *word = word.rotate_right(n);
-        }
+        self.0[0] = self.0[0].rotate_right(n);
+        self.0[1] = self.0[1].rotate_right(n);
+        self.0[2] = self.0[2].rotate_right(n);
+        self.0[3] = self.0[3].rotate_right(n);
+        //for word in &mut self.0 {
+        //    *word = word.rotate_right(n);
+        //}
     }
 
     /// Equivalent to `_mm_shuffle_epi32(src, _MM_SHUFFLE!(z, y, x, w))`
@@ -96,15 +100,26 @@ fn map_out_lhs_rhs<'a>(
     (out, lhs, rhs)
 }
 
+macro_rules! r {
+    ($row:expr, $idx:expr) => {
+        $row.0[$idx]
+    };
+}
+
 impl Add<&Row> for &Row {
     type Output = Row;
 
     #[inline(always)]
     fn add(self, rhs: &Row) -> Self::Output {
         let mut out = Row([0; 4]);
-        for (out, (lhs, rhs)) in out.0.iter_mut().zip(self.0.iter().zip(rhs.0)) {
+        r!(out, 0) = r!(self, 0).wrapping_add(r!(rhs, 0));
+        r!(out, 1) = r!(self, 1).wrapping_add(r!(rhs, 1));
+        r!(out, 2) = r!(self, 2).wrapping_add(r!(rhs, 2));
+        r!(out, 3) = r!(self, 3).wrapping_add(r!(rhs, 3));
+
+        /*for (out, (lhs, rhs)) in out.0.iter_mut().zip(self.0.iter().zip(rhs.0)) {
             *out = lhs.wrapping_add(rhs)
-        }
+        }*/
         out
     }
 }
@@ -112,18 +127,28 @@ impl Add<&Row> for &Row {
 impl AddAssign<&Row> for Row {
     #[inline(always)]
     fn add_assign(&mut self, rhs: &Row) {
-        for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
-            *lhs = lhs.wrapping_add(rhs)
-        }
+        r!(self, 0) = r!(self, 0).wrapping_add(r!(rhs, 0));
+        r!(self, 1) = r!(self, 1).wrapping_add(r!(rhs, 1));
+        r!(self, 2) = r!(self, 2).wrapping_add(r!(rhs, 2));
+        r!(self, 3) = r!(self, 3).wrapping_add(r!(rhs, 3));
+
+        //for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
+        //    *lhs = lhs.wrapping_add(rhs)
+        //}
     }
 }
 
 impl BitXorAssign<&Row> for Row {
     #[inline(always)]
     fn bitxor_assign(&mut self, rhs: &Row) {
-        for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
-            *lhs ^= rhs
-        }
+        r!(self, 0) ^= r!(rhs, 0);
+        r!(self, 1) ^= r!(rhs, 1);
+        r!(self, 2) ^= r!(rhs, 2);
+        r!(self, 3) ^= r!(rhs, 3);
+
+        //for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
+        //    *lhs ^= rhs
+        //}
     }
 }
 
@@ -133,9 +158,13 @@ impl BitAnd<Self> for &Row {
     #[inline(always)]
     fn bitand(self, rhs: Self) -> Self::Output {
         let mut out = Row::empty();
-        for (out, lhs, rhs) in out.iter_ops(self, rhs) {
-            *out = lhs & rhs
-        }
+        r!(out, 0) = r!(self, 0) & r!(rhs, 0);
+        r!(out, 1) = r!(self, 1) & r!(rhs, 1);
+        r!(out, 2) = r!(self, 2) & r!(rhs, 2);
+        r!(out, 3) = r!(self, 3) & r!(rhs, 3);
+        //for (out, lhs, rhs) in out.iter_ops(self, rhs) {
+        //    *out = lhs & rhs
+        //}
         out
     }
 }
@@ -145,9 +174,13 @@ impl BitOr<Self> for Row {
 
     #[inline(always)]
     fn bitor(mut self, rhs: Self) -> Self::Output {
-        for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
-            *lhs |= rhs;
-        }
+        r!(self, 0) |= r!(rhs, 0);
+        r!(self, 1) |= r!(rhs, 1);
+        r!(self, 2) |= r!(rhs, 2);
+        r!(self, 3) |= r!(rhs, 3);
+        //for (lhs, rhs) in self.0.iter_mut().zip(rhs.0) {
+        //    *lhs |= rhs;
+        //}
         self
     }
 }
@@ -158,9 +191,13 @@ impl Not for &Row {
     #[inline(always)]
     fn not(self) -> Self::Output {
         let mut out = Row::empty();
-        for (out, word) in out.iter_mut().zip(self.0) {
-            *out = !word
-        }
+        r!(out, 0) = !r!(self, 0);
+        r!(out, 1) = !r!(self, 1);
+        r!(out, 2) = !r!(self, 2);
+        r!(out, 3) = !r!(self, 3);
+        //for (out, word) in out.iter_mut().zip(self.0) {
+        //    *out = !word
+        //}
         out
     }
 }
@@ -203,6 +240,22 @@ fn undiagonalize(row0: &mut Row, row2: &mut Row, row3: &mut Row) {
     *row2 = Row::shuffle(row2, 2, 1, 0, 3);
 }
 
+macro_rules! cmpeq_epi16 {
+    ($out:expr, $mask:expr, $bits:expr, $offset:literal) => {
+        let [m0, m1, m2, m3] = $mask.0[$offset].to_le_bytes();
+        let [b0, b1, b2, b3] = $bits.0[$offset].to_le_bytes();
+
+        let first = cmp_u16(m0, m1, b0, b1);
+        let second = cmp_u16(m2, m3, b2, b3);
+
+        let idx = $offset * 4;
+        $out[idx] = first;
+        $out[idx + 1] = first;
+        $out[idx + 2] = second;
+        $out[idx + 3] = second;
+    };
+}
+
 #[inline(always)]
 fn blend_epi16(lhs: &Row, rhs: &Row, imm8: i32) -> Row {
     let bits = Row([0x0001_0002, 0x0004_0008, 0x0010_0020, 0x0040_0080]);
@@ -218,19 +271,10 @@ fn blend_epi16(lhs: &Row, rhs: &Row, imm8: i32) -> Row {
     mask = {
         // todo: chunk
         let mut out = [0u8; 16];
-        for idx in 0..mask.0.len() {
-            let [m0, m1, m2, m3] = mask.0[idx].to_le_bytes();
-            let [b0, b1, b2, b3] = bits.0[idx].to_le_bytes();
-
-            let first = cmp_u16(m0, m1, b0, b1);
-            let second = cmp_u16(m2, m3, b2, b3);
-
-            let idx = idx * 4;
-            out[idx] = first;
-            out[idx + 1] = first;
-            out[idx + 2] = second;
-            out[idx + 3] = second;
-        }
+        cmpeq_epi16!(out, mask, bits, 0);
+        cmpeq_epi16!(out, mask, bits, 1);
+        cmpeq_epi16!(out, mask, bits, 2);
+        cmpeq_epi16!(out, mask, bits, 3);
         Row::from(&out)
     };
 
