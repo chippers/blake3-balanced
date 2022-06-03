@@ -1,6 +1,7 @@
-# blake3-simple
+# blake3-balanced
 
-A simple implementation of BLAKE3 based on the BLAKE3 Rust reference.
+A balanced implementation of BLAKE3 for compilation time. Useful in scenarios,
+such as codegen, where the run time is combined with the compilation time.
 
 ## why?
 
@@ -43,10 +44,10 @@ characteristics are desired.
 ## benchmarks
 
 There are benchmarks in an attempt to keep track of the run time differences
-between [`blake3`], the BLAKE3 Rust reference, and `blake3-simple` in addition
-to measure and improve performance of `blake3-simple`. The input file that is
-used is the JavaScript vendor file from v1.10.10 of [element-web]. To run the
-benchmarks, use `cargo-criterion`.
+between [`blake3`], the BLAKE3 Rust reference, and `blake3-balanced` in
+addition to measure and improve performance of `blake3-balanced`. The input
+file that is used is the JavaScript vendor file from v1.10.10 of [element-web].
+To run the benchmarks, use `cargo-criterion`.
 
 1. install: `cargo install cargo-criterion`
 2. run: `cargo criterion`
