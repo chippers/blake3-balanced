@@ -9,11 +9,8 @@ edition = "2018"
 [dependencies]
 rayon = { version = "1", optional = true }
 
-[build-dependencies]
-rustflags = { version = "0.1", optional = true }
-
 [dev-dependencies]
-blake3 = { version = "1", features = ["pure"] }
+blake3 = { version = "1", features = ["pure","rayon"] }
 blake3-reference = { git = "https://github.com/BLAKE3-team/BLAKE3", package = "reference_impl" }
 criterion = "0.3"
 

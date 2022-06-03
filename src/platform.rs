@@ -36,6 +36,18 @@ macro_rules! word_to_bytes {
     };
 }
 
+/// Take 4 bytes from the first item and turn it into a word in the idx position of
+macro_rules! bytes_to_word {
+    ($bytes:expr, $out:expr, $idx:expr) => {
+        $out[$idx] = u32::from_le_bytes([
+            $bytes[$idx * 4],
+            $bytes[($idx * 4) + 1],
+            $bytes[($idx * 4) + 2],
+            $bytes[($idx * 4) + 3],
+        ])
+    };
+}
+
 #[inline(always)]
 pub(crate) fn le_bytes_from_words_32(words: &[u32; 8]) -> [u8; 32] {
     let mut out = [0; 32];
@@ -50,17 +62,6 @@ pub(crate) fn le_bytes_from_words_32(words: &[u32; 8]) -> [u8; 32] {
     word_to_bytes!(words, out, 7);
 
     out
-}
-
-macro_rules! bytes_to_word {
-    ($bytes:expr, $out:expr, $idx:expr) => {
-        $out[$idx] = u32::from_le_bytes([
-            $bytes[$idx * 4],
-            $bytes[($idx * 4) + 1],
-            $bytes[($idx * 4) + 2],
-            $bytes[($idx * 4) + 3],
-        ])
-    };
 }
 
 #[inline(always)]
@@ -79,7 +80,6 @@ pub(crate) fn words_from_le_bytes_32(bytes: &[u8; 32]) -> [u32; 8] {
     out
 }
 
-//#[cfg(not(complex))]
 #[inline(always)]
 pub(crate) fn words_from_le_bytes_64(bytes: &[u8; 64]) -> [u32; 16] {
     let mut out = [0; 16];
