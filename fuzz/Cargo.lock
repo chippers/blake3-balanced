@@ -65,16 +65,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "blake3-simple"
+name = "blake3-balanced"
 version = "0.1.0"
 
 [[package]]
-name = "blake3-simple-fuzz"
+name = "blake3-balanced-fuzz"
 version = "0.0.1"
 dependencies = [
  "afl",
  "blake3",
- "blake3-simple",
+ "blake3-balanced",
  "reference_impl",
 ]
 

@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "blake3-simple-fuzz"
+name = "blake3-balanced-fuzz"
 version = "0.0.1"
 license = "Apache-2.0 OR MIT"
 publish = false
@@ -10,4 +10,4 @@ edition = "2018"
 afl = "0.12"
 blake3 = { version = "1", features = ["rayon"] }
 blake3-reference = { path = "../BLAKE3/reference_impl", package = "reference_impl" }
-blake3-simple = { path = ".." }
+blake3-balanced = { path = ".." }

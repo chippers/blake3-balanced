@@ -14,15 +14,15 @@ fn main() {
             out
         };
 
-        let simple = {
-            let mut hasher = ::blake3_simple::Hasher::new();
+        let balanced = {
+            let mut hasher = ::blake3_balanced::Hasher::new();
             hasher.update(data);
             *hasher.finalize().as_bytes()
         };
 
-        for ((&reference, standard), simple) in reference.iter().zip(standard).zip(simple) {
+        for ((&reference, standard), balanced) in reference.iter().zip(standard).zip(balanced) {
             assert_eq!(reference, standard);
-            assert_eq!(reference, simple);
+            assert_eq!(reference, balanced);
         }
     });
 }
