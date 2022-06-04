@@ -3,6 +3,8 @@
 A balanced implementation of BLAKE3 for compilation time. Useful in scenarios,
 such as codegen, where the run time is combined with the compilation time.
 
+[![Rust](https://img.shields.io/badge/rust-1.51.0%2B-informational.svg?maxAge=3600)](https://github.com/rust-lang/regex)
+
 ## why?
 
 This project was inspired from using BLAKE3 as a file hasing algorithm during
@@ -25,11 +27,11 @@ collected on a ThinkPad T410 Intel i5-520M[^1]. The compile time was measured
 using the `--timings` flag on Cargo and the run time with [hyperfine]. The file
 hashed was a 6.8MiB JavaScript file.
 
-| crate | features | compile time | run time |
-| --- | --- | --- | --- |
-| `blake3` | `rayon` | 19.2s | 8.7ms |
-| `blake3` | | 8.5s | 14.9ms |
-| `blake3_reference` | | 1.5s | 37.9ms |
+| crate              | features | compile time | run time |
+| ------------------ | -------- | ------------ | -------- |
+| `blake3`           | `rayon`  | 19.2s        | 8.7ms    |
+| `blake3`           |          | 8.5s         | 14.9ms   |
+| `blake3_reference` |          | 1.5s         | 37.9ms   |
 
 [^1]: ThinkPad T410 Intel i5-520M, 8 GiB RAM, 120GB SSD.
 
@@ -56,3 +58,7 @@ To run the benchmarks, use `cargo-criterion`.
 [See this GitHub thread]: https://github.com/BLAKE3-team/BLAKE3/pull/228
 [hyperfine]: https://github.com/sharkdp/hyperfine
 [element-web]: https://github.com/vector-im/element-web
+
+## Minimum Supported Rust Version
+
+This crate's minimum supported Rust version is `1.51.0`.

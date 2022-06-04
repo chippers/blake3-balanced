@@ -6,6 +6,9 @@ authors = ["Chip Reed <chip@chip.sh>"]
 license = "Apache-2.0 OR MIT"
 edition = "2018"
 
+[package.metadata]
+msrv = "1.51.0"
+
 [dependencies]
 rayon = { version = "1", optional = true }
 
