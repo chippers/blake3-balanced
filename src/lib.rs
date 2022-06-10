@@ -263,8 +263,8 @@ fn left_len(content_len: usize) -> usize {
     largest_power_of_two_leq(full_chunks) * CHUNK_LEN
 }
 
-pub const MAX_SIMD_DEGREE: usize = 4;
-pub const MAX_SIMD_DEGREE_OR_2: usize = 4;
+pub const MAX_SIMD_DEGREE: usize = 1;
+pub const MAX_SIMD_DEGREE_OR_2: usize = 2;
 
 // Use SIMD parallelism to hash up to MAX_SIMD_DEGREE chunks at the same time
 // on a single thread. Write out the chunk chaining values and return the
@@ -979,9 +979,8 @@ impl Default for Hasher {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn parity() {
-        let data = b"a string to test";
+    /// asserts that all implementations have the same output
+    fn assert_implementation_output(data: &[u8]) {
         let standard = {
             let mut hasher = ::blake3::Hasher::default();
             hasher.update(data);
@@ -1002,18 +1001,36 @@ mod tests {
             *hasher.finalize().as_bytes()
         };
 
-        for ((&reference, standard), balanced) in reference.iter().zip(standard).zip(balanced) {
-            assert_eq!(reference, standard);
-            assert_eq!(reference, balanced);
-        }
+        assert_eq!(reference, standard);
+        assert_eq!(reference, balanced);
     }
 
     #[test]
-    fn large_file() {
+    fn small() {
+        assert_implementation_output(b"small");
+    }
+
+    #[test]
+    fn large() {
         let data = include_bytes!("../benches/element-web-v1.10.10-vendors~init.js");
-        let mut hasher = super::Hasher::new();
-        hasher.update(data);
-        let bytes = *hasher.finalize().as_bytes();
-        assert!(!bytes.iter().all(|&b| b == 0))
+        assert_implementation_output(data);
+    }
+
+    #[test]
+    fn previous_fuzzing_fails() {
+        let data = include_bytes!("../tests/data/fuzz_00");
+        assert_implementation_output(data);
+
+        let data = include_bytes!("../tests/data/fuzz_01");
+        assert_implementation_output(data);
+
+        let data = include_bytes!("../tests/data/fuzz_02");
+        assert_implementation_output(data);
+
+        let data = include_bytes!("../tests/data/fuzz_03");
+        assert_implementation_output(data);
+
+        let data = include_bytes!("../tests/data/fuzz_04");
+        assert_implementation_output(data);
     }
 }
